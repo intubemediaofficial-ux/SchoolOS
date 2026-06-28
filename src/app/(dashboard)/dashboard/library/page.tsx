@@ -1,68 +1,110 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api-client";
+
+interface Book {
+  id: string;
+  title: string;
+  author: string;
+  isbn?: string;
+  category: string;
+  totalCopies: number;
+  availableCopies: number;
+}
+
 export default function LibraryPage() {
-  const books = [
-    { id: "1", title: "Mathematics NCERT Class 10", isbn: "978-81-7450-123-4", author: "NCERT", copies: 45, available: 32, category: "Textbook" },
-    { id: "2", title: "Physics Fundamentals", isbn: "978-81-7450-456-7", author: "HC Verma", copies: 30, available: 12, category: "Reference" },
-    { id: "3", title: "Harry Potter and the Philosopher's Stone", isbn: "978-0-7475-3269-9", author: "J.K. Rowling", copies: 15, available: 3, category: "Fiction" },
-    { id: "4", title: "Introduction to Algorithms", isbn: "978-0-262-03384-8", author: "Cormen", copies: 10, available: 7, category: "Reference" },
-  ];
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ title: "", author: "", isbn: "", category: "General", totalCopies: "1" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+
+  const fetchBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: Book[]; pagination: { total: number } }>(`/api/library?search=${search}`);
+      setBooks(res.data);
+      setTotal(res.pagination.total);
+    } catch { setBooks([]); }
+    finally { setLoading(false); }
+  }, [search]);
+
+  useEffect(() => { fetchBooks(); }, [fetchBooks]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title || !formData.author) { setMsg("Title and author required"); return; }
+    setSaving(true); setMsg("");
+    try {
+      await api.post("/api/library", { ...formData, totalCopies: parseInt(formData.totalCopies) });
+      setMsg("Book added!");
+      setShowForm(false);
+      setFormData({ title: "", author: "", isbn: "", category: "General", totalCopies: "1" });
+      fetchBooks();
+    } catch (err) { setMsg((err as Error).message); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Library Management</h1>
-          <p className="text-sm text-gray-500">Book catalog, barcode scanning, issue/return tracking &amp; OPAC</p>
+          <h1 className="text-2xl font-bold text-gray-900">Library</h1>
+          <p className="text-sm text-gray-500">Total: {total} books</p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition">Scan Barcode</button>
-          <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">Add Book</button>
-        </div>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+          {showForm ? "Cancel" : "+ Add Book"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Total Books", value: "12,450", color: "text-blue-600" },
-          { label: "Issued Today", value: "34", color: "text-green-600" },
-          { label: "Overdue Returns", value: "23", color: "text-red-600" },
-          { label: "New Arrivals", value: "45", color: "text-purple-600" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="text-xs text-gray-500">{s.label}</div>
-            <div className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</div>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.includes("added") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</div>}
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Book Title" />
+            <input type="text" value={formData.author} onChange={(e) => setFormData({ ...formData, author: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Author" />
+            <input type="text" value={formData.isbn} onChange={(e) => setFormData({ ...formData, isbn: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="ISBN (optional)" />
+            <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="border rounded-lg px-3 py-2 text-sm">
+              <option>General</option><option>Science</option><option>Mathematics</option><option>English</option><option>Hindi</option><option>Social Science</option><option>Computer</option><option>Reference</option>
+            </select>
+            <input type="number" value={formData.totalCopies} onChange={(e) => setFormData({ ...formData, totalCopies: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Copies" min="1" />
           </div>
-        ))}
-      </div>
+          <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">{saving ? "Adding..." : "Add Book"}</button>
+        </form>
+      )}
 
-      <div className="bg-white rounded-xl border border-gray-100">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Book Catalog</h3>
-          <input type="text" placeholder="Search by title, ISBN, author..." className="px-4 py-2 border border-gray-200 rounded-lg text-sm w-64" />
+      <div className="bg-white rounded-xl border">
+        <div className="p-4 border-b">
+          <input type="text" placeholder="Search books..." value={search} onChange={(e) => setSearch(e.target.value)} className="border rounded-lg px-3 py-2 text-sm w-64" />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100">
+              <tr className="border-b bg-gray-50">
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Title</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">ISBN</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Author</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Category</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Copies</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">ISBN</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Available</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {books.map((b) => (
-                <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{b.title}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-500">{b.isbn}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{b.author}</td>
-                  <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{b.category}</span></td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{b.copies}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-green-600">{b.available}</td>
-                  <td className="px-4 py-3">
-                    <button className="text-xs text-primary hover:underline">Issue</button>
-                  </td>
+              {loading ? (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">Loading...</td></tr>
+              ) : books.length === 0 ? (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">No books found</td></tr>
+              ) : books.map(b => (
+                <tr key={b.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium">{b.title}</td>
+                  <td className="px-4 py-3 text-sm">{b.author}</td>
+                  <td className="px-4 py-3 text-sm">{b.category}</td>
+                  <td className="px-4 py-3 text-sm font-mono">{b.isbn || "-"}</td>
+                  <td className="px-4 py-3 text-sm">{b.availableCopies}/{b.totalCopies}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,137 +1,185 @@
-import { students } from "@/lib/mock-data";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api-client";
+
+interface Student {
+  id: string;
+  admissionNo: string;
+  name: string;
+  gender: string;
+  fatherName: string;
+  fatherPhone?: string;
+  dateOfBirth: string;
+  status: string;
+  section?: { name: string; class: { name: string } };
+}
+
+interface ClassData {
+  id: string;
+  name: string;
+  sections: { id: string; name: string }[];
+}
 
 export default function StudentsPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ name: "", dateOfBirth: "", gender: "male", fatherName: "", fatherPhone: "", sectionId: "", motherName: "", address: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: Student[]; pagination: { total: number } }>(`/api/students?page=${page}&limit=20&search=${search}`);
+      setStudents(res.data);
+      setTotal(res.pagination.total);
+    } catch { setStudents([]); }
+    finally { setLoading(false); }
+  }, [page, search]);
+
+  const fetchClasses = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: ClassData[] }>("/api/classes");
+      setClasses(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchStudents(); }, [fetchStudents]);
+  useEffect(() => { fetchClasses(); }, [fetchClasses]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.sectionId || !formData.dateOfBirth || !formData.fatherName) {
+      setMsg("Please fill all required fields"); return;
+    }
+    setSaving(true); setMsg("");
+    try {
+      await api.post("/api/students", formData);
+      setMsg("Student added successfully!");
+      setShowForm(false);
+      setFormData({ name: "", dateOfBirth: "", gender: "male", fatherName: "", fatherPhone: "", sectionId: "", motherName: "", address: "" });
+      fetchStudents();
+    } catch (err) { setMsg((err as Error).message); }
+    finally { setSaving(false); }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Student Management</h1>
-          <p className="text-sm text-gray-500">Manage all student records, profiles, and documents</p>
+          <p className="text-sm text-gray-500">Total: {total} students</p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-            Import
-          </button>
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            Export
-          </button>
-          <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Add Student
-          </button>
-        </div>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition">
+          {showForm ? "Cancel" : "+ Add Student"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Total Students", value: "2,847", color: "text-blue-600 bg-blue-50" },
-          { label: "Active", value: "2,710", color: "text-green-600 bg-green-50" },
-          { label: "Fee Defaulters", value: "234", color: "text-red-600 bg-red-50" },
-          { label: "New This Year", value: "312", color: "text-orange-600 bg-orange-50" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="text-xs text-gray-500">{s.label}</div>
-            <div className={`text-2xl font-bold mt-1 ${s.color.split(" ")[0]}`}>{s.value}</div>
-          </div>
-        ))}
-      </div>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.includes("success") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</div>}
 
-      <div className="bg-white rounded-xl border border-gray-100">
-        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="flex gap-2 flex-wrap">
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
-              <option>All Classes</option>
-              {["1","2","3","4","5","6","7","8","9","10","11","12"].map(c => <option key={c}>Class {c}</option>)}
-            </select>
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
-              <option>All Sections</option><option>A</option><option>B</option><option>C</option><option>D</option>
-            </select>
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
-              <option>All Status</option><option>Active</option><option>Inactive</option><option>Graduated</option><option>Transferred</option>
-            </select>
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
-              <option>Fee Status</option><option>Paid</option><option>Pending</option><option>Overdue</option>
-            </select>
+      {showForm && (
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Add New Student</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Student Name *</label>
+              <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Full Name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
+              <input type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
+              <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Class & Section *</label>
+              <select value={formData.sectionId} onChange={(e) => setFormData({ ...formData, sectionId: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="">Select Class-Section</option>
+                {classes.map((c) => c.sections.map((s) => (
+                  <option key={s.id} value={s.id}>{c.name} - {s.name}</option>
+                )))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Father Name *</label>
+              <input type="text" value={formData.fatherName} onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Father's Name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone</label>
+              <input type="tel" value={formData.fatherPhone} onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="9876543210" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mother Name</label>
+              <input type="text" value={formData.motherName} onChange={(e) => setFormData({ ...formData, motherName: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Mother's Name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <input type="text" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Address" />
+            </div>
           </div>
-          <div className="relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            <input type="text" placeholder="Search students..." className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-60" />
-          </div>
+          <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+            {saving ? "Saving..." : "Add Student"}
+          </button>
+        </form>
+      )}
+
+      <div className="bg-white rounded-xl border">
+        <div className="p-4 border-b flex gap-3 items-center">
+          <input type="text" placeholder="Search students..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm w-64" />
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Adm. No</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Student Name</th>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Adm No</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Name</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Class</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Father Name</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Father</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Phone</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Attendance</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Fee Status</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Actions</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Gender</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
-              {students.map((s) => (
-                <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                  <td className="px-4 py-3 text-sm font-mono text-gray-500">{s.admissionNo}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-primary text-sm font-medium">{s.name[0]}</div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{s.name}</div>
-                        <div className="text-xs text-gray-400">{s.gender}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.class}-{s.section}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.fatherName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.phone}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${s.attendancePercent >= 90 ? "bg-green-500" : s.attendancePercent >= 75 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${s.attendancePercent}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-500">{s.attendancePercent}%</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      s.feeStatus === "paid" ? "bg-green-50 text-green-600" :
-                      s.feeStatus === "pending" ? "bg-yellow-50 text-yellow-600" :
-                      "bg-red-50 text-red-600"
-                    }`}>{s.feeStatus}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      <button className="p-1.5 hover:bg-gray-100 rounded-lg" title="View">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                      </button>
-                      <button className="p-1.5 hover:bg-gray-100 rounded-lg" title="Edit">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                      </button>
-                    </div>
-                  </td>
+              {loading ? (
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400">Loading...</td></tr>
+              ) : students.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400">No students found</td></tr>
+              ) : students.map((s) => (
+                <tr key={s.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-mono">{s.admissionNo}</td>
+                  <td className="px-4 py-3 text-sm font-medium">{s.name}</td>
+                  <td className="px-4 py-3 text-sm">{s.section ? `${s.section.class.name} - ${s.section.name}` : "-"}</td>
+                  <td className="px-4 py-3 text-sm">{s.fatherName}</td>
+                  <td className="px-4 py-3 text-sm">{s.fatherPhone || "-"}</td>
+                  <td className="px-4 py-3 text-sm capitalize">{s.gender}</td>
+                  <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs ${s.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>{s.status}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        <div className="p-4 border-t border-gray-100 flex items-center justify-between">
-          <span className="text-sm text-gray-500">Showing 1-5 of 2,847 students</span>
-          <div className="flex gap-1">
-            <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">Previous</button>
-            <button className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm">1</button>
-            <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">2</button>
-            <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">3</button>
-            <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">Next</button>
+        {total > 20 && (
+          <div className="p-4 border-t flex justify-between items-center">
+            <span className="text-sm text-gray-500">Page {page} of {Math.ceil(total / 20)}</span>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Prev</button>
+              <button onClick={() => setPage(p => p + 1)} disabled={page * 20 >= total} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Next</button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
