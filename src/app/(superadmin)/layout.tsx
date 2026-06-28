@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
   { name: "Overview", href: "/superadmin", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -19,6 +20,7 @@ export default function SuperAdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -49,11 +51,18 @@ export default function SuperAdminLayout({
         </nav>
         <div className="p-4 border-t border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-red-500/30 rounded-full flex items-center justify-center text-white text-sm font-medium">SA</div>
-            <div>
-              <div className="text-sm font-medium text-white">Platform Admin</div>
+            <div className="w-8 h-8 bg-red-500/30 rounded-full flex items-center justify-center text-white text-sm font-medium">
+              {user?.name?.[0] || "SA"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-white truncate">{user?.name || "Platform Admin"}</div>
               <div className="text-xs text-gray-400">Super Admin</div>
             </div>
+            <button onClick={logout} className="p-1.5 hover:bg-white/10 rounded-lg transition" title="Logout">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           </div>
         </div>
       </aside>
@@ -62,7 +71,7 @@ export default function SuperAdminLayout({
           <h2 className="text-sm font-medium text-gray-500">Platform Management</h2>
           <div className="flex items-center gap-3">
             <span className="text-xs bg-red-50 text-red-600 px-3 py-1 rounded-full font-medium">Super Admin</span>
-            <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900">Logout</Link>
+            <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-900">Logout</button>
           </div>
         </header>
         <main className="flex-1 p-6">{children}</main>

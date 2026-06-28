@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { dashboardStats, revenueData, attendanceData } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 
 const statCards = [
   { label: "Total Students", value: dashboardStats.totalStudents.toLocaleString(), change: "+12%", color: "bg-blue-50 text-blue-600", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
@@ -20,12 +23,14 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500">Welcome back! Here&apos;s your school overview.</p>
+          <h1 className="text-2xl font-bold text-gray-900">School Dashboard</h1>
+          <p className="text-sm text-gray-500">Welcome, {user?.name || "Admin"}! {user?.school?.name || "School"} overview.</p>
         </div>
         <div className="flex gap-2">
           <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">

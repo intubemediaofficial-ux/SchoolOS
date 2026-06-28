@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     email: user.email,
     phone: user.phone,
     role: user.role,
-    avatar: user.avatar,
-    school: user.school,
+    school: user.school
+      ? { id: user.school.id, name: user.school.name, subdomain: user.school.subdomain }
+      : null,
   });
 }
