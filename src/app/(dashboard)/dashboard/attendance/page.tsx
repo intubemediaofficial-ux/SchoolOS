@@ -1,128 +1,212 @@
-import { attendanceRecords, attendanceData } from "@/lib/mock-data";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api-client";
+
+interface ClassData {
+  id: string;
+  name: string;
+  sections: { id: string; name: string }[];
+}
+
+interface Student {
+  id: string;
+  name: string;
+  admissionNo: string;
+  rollNo?: number;
+}
+
+interface AttendanceRecord {
+  id: string;
+  date: string;
+  status: string;
+  student: { name: string; admissionNo: string };
+  section: { name: string; class: { name: string } };
+}
 
 export default function AttendancePage() {
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [selectedSection, setSelectedSection] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [attendance, setAttendance] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [viewMode, setViewMode] = useState<"mark" | "view">("mark");
+
+  const fetchClasses = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: ClassData[] }>("/api/classes");
+      setClasses(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchClasses(); }, [fetchClasses]);
+
+  const fetchStudents = useCallback(async () => {
+    if (!selectedSection) return;
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: Student[] }>(`/api/students?sectionId=${selectedSection}&limit=100`);
+      setStudents(res.data);
+      const initial: Record<string, string> = {};
+      res.data.forEach(s => { initial[s.id] = "present"; });
+      setAttendance(initial);
+    } catch { setStudents([]); }
+    finally { setLoading(false); }
+  }, [selectedSection]);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({ limit: "100" });
+      if (selectedSection) params.set("sectionId", selectedSection);
+      if (date) params.set("date", date);
+      const res = await api.get<{ data: AttendanceRecord[] }>(`/api/attendance?${params}`);
+      setRecords(res.data);
+    } catch { setRecords([]); }
+    finally { setLoading(false); }
+  }, [selectedSection, date]);
+
+  useEffect(() => { if (viewMode === "mark") fetchStudents(); else fetchRecords(); }, [viewMode, fetchStudents, fetchRecords]);
+
+  const handleMarkAll = (status: string) => {
+    const updated: Record<string, string> = {};
+    students.forEach(s => { updated[s.id] = status; });
+    setAttendance(updated);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedSection || students.length === 0) { setMsg("Select class and section first"); return; }
+    setSaving(true); setMsg("");
+    try {
+      const records = Object.entries(attendance).map(([studentId, status]) => ({ studentId, status }));
+      await api.post("/api/attendance", { records, date, sectionId: selectedSection });
+      setMsg(`Attendance marked for ${records.length} students!`);
+    } catch (err) { setMsg((err as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  const presentCount = Object.values(attendance).filter(v => v === "present").length;
+  const absentCount = Object.values(attendance).filter(v => v === "absent").length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Attendance Management</h1>
-          <p className="text-sm text-gray-500">Track daily student &amp; staff attendance with biometric/RFID integration</p>
+          <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
+          <p className="text-sm text-gray-500">Mark and view daily attendance</p>
         </div>
         <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition">Download Report</button>
-          <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">Mark Attendance</button>
+          <button onClick={() => setViewMode("mark")} className={`px-4 py-2 rounded-lg text-sm ${viewMode === "mark" ? "bg-blue-600 text-white" : "border"}`}>Mark Attendance</button>
+          <button onClick={() => setViewMode("view")} className={`px-4 py-2 rounded-lg text-sm ${viewMode === "view" ? "bg-blue-600 text-white" : "border"}`}>View Records</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          { label: "Present Today", value: "2,683", pct: "94.2%", color: "text-green-600 bg-green-50" },
-          { label: "Absent Today", value: "112", pct: "3.9%", color: "text-red-600 bg-red-50" },
-          { label: "Late Today", value: "35", pct: "1.2%", color: "text-yellow-600 bg-yellow-50" },
-          { label: "On Leave", value: "17", pct: "0.6%", color: "text-blue-600 bg-blue-50" },
-          { label: "Staff Present", value: "138/142", pct: "97.2%", color: "text-purple-600 bg-purple-50" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-gray-500">{s.label}</div>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${s.color}`}>{s.pct}</span>
-            </div>
-            <div className={`text-2xl font-bold mt-1 ${s.color.split(" ")[0]}`}>{s.value}</div>
-          </div>
-        ))}
+      <div className="flex gap-4 items-end">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Class & Section</label>
+          <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+            <option value="">Select Class-Section</option>
+            {classes.map(c => c.sections.map(s => (
+              <option key={s.id} value={s.id}>{c.name} - {s.name}</option>
+            )))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100">
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Today&apos;s Attendance — June 28, 2025</h3>
-            <div className="flex gap-2">
-              <select className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
-                <option>All Classes</option>
-                {["7","8","9","10"].map(c => <option key={c}>Class {c}</option>)}
-              </select>
-              <select className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
-                <option>All Sections</option><option>A</option><option>B</option><option>C</option>
-              </select>
-            </div>
-          </div>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.includes("marked") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</div>}
+
+      {viewMode === "mark" ? (
+        <div className="bg-white rounded-xl border">
+          {selectedSection && students.length > 0 && (
+            <>
+              <div className="p-4 border-b flex items-center justify-between">
+                <div className="flex gap-4 text-sm">
+                  <span className="text-green-600 font-medium">Present: {presentCount}</span>
+                  <span className="text-red-600 font-medium">Absent: {absentCount}</span>
+                  <span className="text-gray-500">Total: {students.length}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleMarkAll("present")} className="px-3 py-1 bg-green-100 text-green-700 rounded text-xs">All Present</button>
+                  <button onClick={() => handleMarkAll("absent")} className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs">All Absent</button>
+                </div>
+              </div>
+              <div className="divide-y">
+                {students.map((s, i) => (
+                  <div key={s.id} className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-400 w-6">{i + 1}</span>
+                      <div>
+                        <div className="text-sm font-medium">{s.name}</div>
+                        <div className="text-xs text-gray-400">{s.admissionNo}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      {["present", "absent", "late", "leave"].map(status => (
+                        <button key={status} onClick={() => setAttendance({ ...attendance, [s.id]: status })}
+                          className={`px-3 py-1 rounded text-xs capitalize ${attendance[s.id] === status
+                            ? status === "present" ? "bg-green-600 text-white"
+                            : status === "absent" ? "bg-red-600 text-white"
+                            : status === "late" ? "bg-yellow-600 text-white"
+                            : "bg-purple-600 text-white"
+                            : "bg-gray-100 text-gray-600"}`}>
+                          {status === "present" ? "P" : status === "absent" ? "A" : status === "late" ? "L" : "Lv"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t">
+                <button onClick={handleSubmit} disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? "Saving..." : "Submit Attendance"}
+                </button>
+              </div>
+            </>
+          )}
+          {!selectedSection && <div className="p-8 text-center text-gray-400">Select class and section to mark attendance</div>}
+          {selectedSection && students.length === 0 && !loading && <div className="p-8 text-center text-gray-400">No students in this section</div>}
+          {loading && <div className="p-8 text-center text-gray-400">Loading...</div>}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b bg-gray-50">
                   <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Student</th>
                   <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Class</th>
+                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Date</th>
                   <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Marked By</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Remarks</th>
                 </tr>
               </thead>
               <tbody>
-                {attendanceRecords.map((r) => (
-                  <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                {loading ? (
+                  <tr><td colSpan={4} className="text-center py-8 text-gray-400">Loading...</td></tr>
+                ) : records.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-8 text-gray-400">No records found</td></tr>
+                ) : records.map(r => (
+                  <tr key={r.id} className="border-b">
+                    <td className="px-4 py-3 text-sm">{r.student.name}</td>
+                    <td className="px-4 py-3 text-sm">{r.section.class.name} - {r.section.name}</td>
+                    <td className="px-4 py-3 text-sm">{new Date(r.date).toLocaleDateString("en-IN")}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-primary text-sm font-medium">{r.studentName[0]}</div>
-                        <span className="text-sm font-medium text-gray-900">{r.studentName}</span>
-                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs capitalize ${r.status === "present" ? "bg-green-100 text-green-700" : r.status === "absent" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{r.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{r.class}-{r.section}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        r.status === "present" ? "bg-green-50 text-green-600" :
-                        r.status === "absent" ? "bg-red-50 text-red-600" :
-                        r.status === "late" ? "bg-yellow-50 text-yellow-600" :
-                        "bg-blue-50 text-blue-600"
-                      }`}>{r.status}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{r.markedBy}</td>
-                    <td className="px-4 py-3 text-sm text-gray-400">{r.remarks || "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
-
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <h3 className="font-semibold text-gray-900 mb-4">Weekly Trend</h3>
-            <div className="space-y-3">
-              {attendanceData.map((d) => (
-                <div key={d.day}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">{d.day}</span>
-                    <span className="font-medium text-green-600">{d.present}%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full bg-green-500" style={{ width: `${d.present}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">Attendance Modes</h3>
-            <div className="space-y-2">
-              {[
-                { mode: "Manual by Teacher", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0z" },
-                { mode: "Biometric Device", icon: "M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" },
-                { mode: "RFID Card Scan", icon: "M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" },
-                { mode: "QR Code Scan", icon: "M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" },
-                { mode: "GPS-Based (Staff)", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" },
-              ].map((m) => (
-                <div key={m.mode} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition">
-                  <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={m.icon} />
-                  </svg>
-                  <span className="text-sm text-gray-700">{m.mode}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

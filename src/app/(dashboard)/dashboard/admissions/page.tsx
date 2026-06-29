@@ -1,113 +1,140 @@
-import { admissions } from "@/lib/mock-data";
+"use client";
 
-const statusColors: Record<string, string> = {
-  enquiry: "bg-gray-50 text-gray-600",
-  applied: "bg-blue-50 text-blue-600",
-  interview: "bg-yellow-50 text-yellow-600",
-  accepted: "bg-green-50 text-green-600",
-  enrolled: "bg-emerald-50 text-emerald-600",
-  rejected: "bg-red-50 text-red-600",
-};
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api-client";
+
+interface Admission {
+  id: string;
+  studentName: string;
+  parentName: string;
+  phone: string;
+  email?: string;
+  classApplied: string;
+  status: string;
+  source?: string;
+  createdAt: string;
+}
 
 export default function AdmissionsPage() {
+  const [admissions, setAdmissions] = useState<Admission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ studentName: "", parentName: "", phone: "", email: "", classApplied: "", source: "walk_in" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const fetchAdmissions = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: Admission[]; pagination: { total: number } }>(`/api/admissions?limit=50${statusFilter ? `&status=${statusFilter}` : ""}`);
+      setAdmissions(res.data);
+      setTotal(res.pagination.total);
+    } catch { setAdmissions([]); }
+    finally { setLoading(false); }
+  }, [statusFilter]);
+
+  useEffect(() => { fetchAdmissions(); }, [fetchAdmissions]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.studentName || !formData.parentName || !formData.phone || !formData.classApplied) { setMsg("Fill required fields"); return; }
+    setSaving(true); setMsg("");
+    try {
+      await api.post("/api/admissions", formData);
+      setMsg("Enquiry added!");
+      setShowForm(false);
+      setFormData({ studentName: "", parentName: "", phone: "", email: "", classApplied: "", source: "walk_in" });
+      fetchAdmissions();
+    } catch (err) { setMsg((err as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  const updateStatus = async (id: string, status: string) => {
+    try {
+      await api.put(`/api/admissions/${id}`, { status });
+      fetchAdmissions();
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Admissions &amp; CRM</h1>
-          <p className="text-sm text-gray-500">Lead management, QR-based forms, enquiry tracking &amp; enrollment</p>
+          <h1 className="text-2xl font-bold text-gray-900">Admissions CRM</h1>
+          <p className="text-sm text-gray-500">{total} enquiries</p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition">Generate QR</button>
-          <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">New Enquiry</button>
-        </div>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+          {showForm ? "Cancel" : "+ New Enquiry"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[
-          { label: "Total Enquiries", value: "456", color: "text-blue-600" },
-          { label: "Applications", value: "234", color: "text-indigo-600" },
-          { label: "Interviews", value: "89", color: "text-yellow-600" },
-          { label: "Accepted", value: "156", color: "text-green-600" },
-          { label: "Enrolled", value: "132", color: "text-emerald-600" },
-          { label: "Conversion Rate", value: "67%", color: "text-purple-600" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="text-xs text-gray-500">{s.label}</div>
-            <div className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</div>
-          </div>
-        ))}
-      </div>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.includes("added") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100">
-          <div className="p-4 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900">Recent Admissions Pipeline</h3>
+      {showForm && (
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Student Name *" />
+            <input type="text" value={formData.parentName} onChange={(e) => setFormData({ ...formData, parentName: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Parent Name *" />
+            <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Phone *" />
+            <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Email" />
+            <input type="text" value={formData.classApplied} onChange={(e) => setFormData({ ...formData, classApplied: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Class Applied For *" />
+            <select value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} className="border rounded-lg px-3 py-2 text-sm">
+              <option value="walk_in">Walk-in</option>
+              <option value="website">Website</option>
+              <option value="referral">Referral</option>
+              <option value="advertisement">Advertisement</option>
+            </select>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Student</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Parent</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Class</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Source</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Applied</th>
+          <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">{saving ? "Saving..." : "Add Enquiry"}</button>
+        </form>
+      )}
+
+      <div className="bg-white rounded-xl border">
+        <div className="p-4 border-b flex gap-2 flex-wrap">
+          {["", "enquiry", "applied", "interview", "accepted", "enrolled", "rejected"].map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1 rounded-full text-xs ${statusFilter === s ? "bg-blue-600 text-white" : "bg-gray-100"}`}>{s || "All"}</button>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Student</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Parent</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Phone</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Class</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400">Loading...</td></tr>
+              ) : admissions.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400">No enquiries</td></tr>
+              ) : admissions.map(a => (
+                <tr key={a.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium">{a.studentName}</td>
+                  <td className="px-4 py-3 text-sm">{a.parentName}</td>
+                  <td className="px-4 py-3 text-sm">{a.phone}</td>
+                  <td className="px-4 py-3 text-sm">{a.classApplied}</td>
+                  <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs capitalize ${a.status === "enrolled" ? "bg-green-100 text-green-700" : a.status === "rejected" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{a.status}</span></td>
+                  <td className="px-4 py-3">
+                    <select onChange={(e) => { if (e.target.value) updateStatus(a.id, e.target.value); e.target.value = ""; }} className="text-xs border rounded px-2 py-1">
+                      <option value="">Change Status</option>
+                      <option value="applied">Applied</option>
+                      <option value="interview">Interview</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="enrolled">Enrolled</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {admissions.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{a.studentName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{a.parentName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">Class {a.class}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{a.source.replace("_", " ")}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[a.status]}`}>{a.status}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-400">{a.appliedDate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">Lead Sources</h3>
-            <div className="space-y-3">
-              {[
-                { source: "Website", count: 145, pct: 32 },
-                { source: "Walk-in", count: 98, pct: 22 },
-                { source: "Referral", count: 87, pct: 19 },
-                { source: "Social Media", count: 76, pct: 17 },
-                { source: "QR Code", count: 50, pct: 11 },
-              ].map((s) => (
-                <div key={s.source}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">{s.source} ({s.count})</span>
-                    <span className="font-medium">{s.pct}%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: `${s.pct}%` }} />
-                  </div>
-                </div>
               ))}
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">Features</h3>
-            <div className="space-y-1.5">
-              {["QR-Based Form Fill", "Website Embed Form", "Facebook Lead Sync", "Auto Follow-ups", "Conversion Analytics", "Document Collection", "Fee Payment in Form"].map((f) => (
-                <div key={f} className="flex items-center gap-2 text-sm text-gray-600 py-1">
-                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                  {f}
-                </div>
-              ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

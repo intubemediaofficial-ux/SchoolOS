@@ -1,99 +1,106 @@
-import { exams } from "@/lib/mock-data";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api-client";
+
+interface Exam {
+  id: string;
+  name: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+}
 
 export default function ExaminationPage() {
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ name: "", type: "unit_test", startDate: "", endDate: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const fetchExams = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: Exam[] }>("/api/exams");
+      setExams(res.data);
+    } catch { setExams([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchExams(); }, [fetchExams]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.startDate || !formData.endDate) { setMsg("Fill all fields"); return; }
+    setSaving(true); setMsg("");
+    try {
+      await api.post("/api/exams", formData);
+      setMsg("Exam created!");
+      setShowForm(false);
+      setFormData({ name: "", type: "unit_test", startDate: "", endDate: "" });
+      fetchExams();
+    } catch (err) { setMsg((err as Error).message); }
+    finally { setSaving(false); }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Examination &amp; Results</h1>
-          <p className="text-sm text-gray-500">Exam scheduling, marks entry, report cards &amp; holistic progress cards (NEP 2020)</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition">Question Bank</button>
-          <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">Create Exam</button>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900">Examination</h1>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+          {showForm ? "Cancel" : "+ Create Exam"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Upcoming Exams", value: "12", color: "text-blue-600" },
-          { label: "Completed", value: "8", color: "text-green-600" },
-          { label: "Pending Results", value: "3", color: "text-yellow-600" },
-          { label: "Question Papers", value: "245", color: "text-purple-600" },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="text-xs text-gray-500">{s.label}</div>
-            <div className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</div>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.includes("created") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</div>}
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" placeholder="Exam Name (UT-1, Mid Term...)" />
+            <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="border rounded-lg px-3 py-2 text-sm">
+              <option value="unit_test">Unit Test</option>
+              <option value="mid_term">Mid Term</option>
+              <option value="final">Final Exam</option>
+              <option value="practice">Practice Test</option>
+            </select>
+            <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
+            <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
           </div>
-        ))}
-      </div>
+          <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">{saving ? "Creating..." : "Create Exam"}</button>
+        </form>
+      )}
 
-      <div className="bg-white rounded-xl border border-gray-100">
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">Exam Schedule</h3>
-        </div>
+      <div className="bg-white rounded-xl border">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Exam</th>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Exam Name</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Type</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Class</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Subject</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Date</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Duration</th>
-                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Max Marks</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Start Date</th>
+                <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">End Date</th>
                 <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
-              {exams.map((e) => (
-                <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{e.name}</td>
-                  <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{e.type.replace("_", " ")}</span></td>
-                  <td className="px-4 py-3 text-sm text-gray-600">Class {e.class}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{e.subject}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{e.date}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{e.duration} min</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{e.maxMarks}</td>
-                  <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600">{e.status}</span></td>
+              {loading ? (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">Loading...</td></tr>
+              ) : exams.length === 0 ? (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">No exams scheduled</td></tr>
+              ) : exams.map(e => (
+                <tr key={e.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium">{e.name}</td>
+                  <td className="px-4 py-3 text-sm capitalize">{e.type.replace("_", " ")}</td>
+                  <td className="px-4 py-3 text-sm">{new Date(e.startDate).toLocaleDateString("en-IN")}</td>
+                  <td className="px-4 py-3 text-sm">{new Date(e.endDate).toLocaleDateString("en-IN")}</td>
+                  <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs ${e.status === "completed" ? "bg-green-100 text-green-700" : e.status === "ongoing" ? "bg-blue-100 text-blue-700" : "bg-yellow-100 text-yellow-700"}`}>{e.status}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">Exam Tools</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {["AI Question Paper Generator", "Marks Entry (Bulk)", "Grade Calculator", "Report Card Designer", "Holistic Progress Card (NEP)", "Rank & Topper Lists", "Subject-wise Analysis", "Performance Trends"].map((t) => (
-              <button key={t} className="text-left p-3 border border-gray-100 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:border-primary/20 transition">
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">Report Card Types</h3>
-          <div className="space-y-2">
-            {[
-              "Standard CBSE Report Card",
-              "ICSE Report Card",
-              "NEP 2020 Holistic Progress Card",
-              "Custom Template Report Card",
-              "Competency-Based Report Card",
-              "Multi-Term Cumulative Card",
-            ].map((r) => (
-              <div key={r} className="flex items-center gap-2 text-sm text-gray-600 p-2 hover:bg-gray-50 rounded-lg">
-                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {r}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>

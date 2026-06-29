@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
   { name: "Dashboard", href: "/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -27,6 +28,7 @@ const menuItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <aside className={`bg-sidebar-bg text-sidebar-text h-screen sticky top-0 flex flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-64"}`}>
@@ -36,7 +38,10 @@ export default function Sidebar() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">S</span>
             </div>
-            <span className="text-lg font-bold text-white">SchoolOS</span>
+            <div>
+              <span className="text-lg font-bold text-white">SchoolOS</span>
+              <span className="text-xs text-blue-400 ml-2">Admin</span>
+            </div>
           </Link>
         )}
         <button
@@ -75,13 +80,20 @@ export default function Sidebar() {
       <div className="p-4 border-t border-white/10">
         <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
           <div className="w-8 h-8 bg-primary/30 rounded-full flex items-center justify-center text-white text-sm font-medium">
-            A
+            {user?.name?.[0] || "A"}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">Admin User</div>
-              <div className="text-xs text-gray-400 truncate">DPS Jaipur</div>
+              <div className="text-sm font-medium text-white truncate">{user?.name || "Admin"}</div>
+              <div className="text-xs text-gray-400 truncate">{user?.school?.name || "School Admin"}</div>
             </div>
+          )}
+          {!collapsed && (
+            <button onClick={logout} className="p-1.5 hover:bg-white/10 rounded-lg transition" title="Logout">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           )}
         </div>
       </div>
